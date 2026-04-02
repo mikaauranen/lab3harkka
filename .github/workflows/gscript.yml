@@ -1,0 +1,64 @@
+name: Label & comment issues
+on:
+  issues:
+    types: [reopened, opened, closed] # Lisätty 'closed'
+  pull_request:
+    types: [opened] # Lisätty PR-tapahtuma
+
+jobs:
+  label_issues:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write # Lisätty oikeus PR-kommentointiin
+    steps:
+      # 1. Alkuperäinen: Labelit ja tervetuloviesti (vain kun avataan)
+      - name: welcome-and-label
+        if: github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'reopened')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.addLabels({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: ["issue", "fix"]
+            });
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: "Thanks for opening this issue! We'll take a look as soon as possible."
+            });
+
+      # 2. TEHTÄVÄ: Kommentti kun issue SULJETAAN
+      - name: Comment on closed issue
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            The issue is now resolved.
+
+      # 3. TEHTÄVÄ: Onnittelu ensimmäisestä Pull Requestista
+      - name: First PR Congratulations
+        if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const creator = context.payload.pull_request.user.login;
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              creator: creator
+            });
+
+            if (pullRequests.length === 1) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `Congratulations @${creator} for opening your first pull request! 🎉`
+              });
+            }
