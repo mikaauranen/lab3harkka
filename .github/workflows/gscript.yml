@@ -1,32 +1,67 @@
-name: Label & comment issues #the name of the workflow
-on: # This action will trigger when an issue is reopened or opened.
+name: Label & comment issues
+on:
   issues:
-    types:
-      - reopened
-      - opened
-jobs: # The jobs that run in this workflow
-  label_issues: # the first job is named as label_issues
-    runs-on: ubuntu-latest # This job will run on the latest version of Ubuntu.
-    permissions: # This job requires write access to issues in order to add labels and comment.
+    types: [reopened, opened, closed] # Lisätty 'closed', jotta sulkeminen huomataan
+  pull_request:
+    types: [opened] # Lisätty 'pull_request', jotta ensimmäinen PR huomataan
+
+jobs:
+  label_issues:
+    runs-on: ubuntu-latest
+    permissions:
       issues: write
-    steps: # The "steps" section contains the individual tasks that will be performed in this job.
-      - name: attach label to issues # The name of the step
-        uses: actions/github-script@v6 # This step uses the "actions/github-script" action to execute a script that adds labels to the issue.
+      pull-requests: write # Lisätty oikeus Pull Requesteihin kommentointiin
+    steps:
+      # 1. Alkuperäinen vaihe (attach label)
+      - name: attach label to issues
+        if: github.event_name == 'issues' && (github.event.action == 'opened' || github.event.action == 'reopened')
+        uses: actions/github-script@v6
         with:
-          script: | # The script calls the GitHub REST API to add labels to the issue.
+          script: |
             github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: ["issue", "fix"]
             })
-      - name: Comment on new issue #this is another step that comments on the issue 
-        uses: peter-evans/create-or-update-comment@v1 # This step uses the "peter-evans/create-or-update-comment" action to create or update a comment on the issue.
+
+      # 2. Alkuperäinen vaihe (Comment on new issue)
+      - name: Comment on new issue
+        if: github.event_name == 'issues' && github.event.action == 'opened'
+        uses: peter-evans/create-or-update-comment@v4 # Päivitetty versio v4:ksi
         with:
-          issue-number: ${{ github.event.issue.number }} # The issue number is obtained from the context of the event that triggered the action.
-          body: | # The body of the comment is a message thanking the user for opening the issue.
-           Thanks for opening this issue! We'll take a look as soon as possible.
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            Thanks for opening this issue! We'll take a look as soon as possible.
 
-# Comment on when an issue is closed
+      # 3. UUSI: Kommentti kun issue suljetaan (Comment on when an issue is closed)
+      - name: Comment on closed issue
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            The issue is now resolved.
 
-# Comment on when an users opens the first pull request
+      # 4. UUSI: Onnittelu ensimmäisestä PR:stä (Comment on when an users opens the first pull request)
+      - name: Comment on first PR
+        if: github.event_name == 'pull_request' && github.event.action == 'opened'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const creator = context.payload.pull_request.user.login;
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              creator: creator
+            });
+
+            if (pullRequests.length === 1) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `Congratulations @${creator} for opening your first pull request! 🎉`
+              });
+            }
