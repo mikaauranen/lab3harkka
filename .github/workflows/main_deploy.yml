@@ -1,0 +1,29 @@
+name: Build and Push Docker Image to ACR
+
+on:
+  push:
+    branches:
+      - main # Vaihda tämä tarvittaessa 'master', jos päähaarasi nimi on master
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. Haetaan koodi repositoriosta
+      - name: 'Checkout GitHub Action'
+        uses: actions/checkout@v4
+
+      # 2. Kirjaudutaan Azure Container Registryyn käyttäen salaisuuksia
+      - name: 'Login via Azure Container Registry'
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      # 3. Rakennetaan Docker-kuva ja työnnetään se ACR:ään
+      - name: 'Build and push image'
+        run: |
+          docker build . -t ${{ secrets.ACR_LOGIN_SERVER }}/testibuild:latest
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/testibuild:latest
